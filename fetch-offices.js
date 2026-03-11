@@ -1,15 +1,12 @@
 const https = require("https");
 const fs = require("fs");
-
 const BASE_ID  = process.env.AIRTABLE_BASE_ID;
 const TABLE_ID = process.env.AIRTABLE_TABLE_ID;
 const API_KEY  = process.env.AIRTABLE_API_KEY;
-
 if (!BASE_ID || !TABLE_ID || !API_KEY) {
   console.error("Missing environment variables.");
   process.exit(1);
 }
-
 function geocode(query) {
   return new Promise((resolve) => {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=en`;
@@ -28,15 +25,12 @@ function geocode(query) {
     req.on("error", () => resolve(null));
   });
 }
-
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
 function extractCityCountry(address) {
   const parts = address.split(",").map(p => p.trim()).filter(Boolean);
   if (parts.length >= 2) return parts.slice(-2).join(", ");
   return address;
 }
-
 function extractCity(address) {
   const parts = address.split(",").map(p => p.trim()).filter(Boolean);
   for (let i = parts.length - 2; i >= 0; i--) {
@@ -49,7 +43,6 @@ function extractCity(address) {
   }
   return parts[parts.length - 2] || parts[0] || "Office";
 }
-
 async function main() {
   const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}`;
   let allRecords = [];
@@ -67,22 +60,16 @@ async function main() {
     allRecords = allRecords.concat(result.records || []);
     offset = result.offset || null;
   } while (offset);
-
   console.log(`Found ${allRecords.length} records`);
-
   const record = allRecords.find(r =>
     r.fields["Name"] && r.fields["Name"].toLowerCase().includes("ec holdings")
   );
-
   if (!record) { console.error("Could not find EC Holdings!"); process.exit(1); }
   console.log("Found:", record.fields["Name"]);
-
   const rawLocations = record.fields["Office Locations"];
   if (!rawLocations) { console.error("Office Locations field is empty!"); process.exit(1); }
-
   const addresses = rawLocations.split("\n").map(a => a.trim()).filter(Boolean);
   console.log(`Found ${addresses.length} addresses`);
-
   const offices = [];
   for (const rawAddress of addresses) {
     const isHq = rawAddress.toUpperCase().startsWith("HQ");
@@ -96,7 +83,6 @@ async function main() {
     offices.push({ city, address: cleanAddress, lat: coords.lat, lng: coords.lng, hq: isHq });
     console.log(`  ✓ ${city}: ${coords.lat}, ${coords.lng}`);
   }
-
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -108,10 +94,10 @@ async function main() {
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Libre+Baskerville&display=swap" rel="stylesheet"/>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #fff; font-family: 'Libre Baskerville', serif; }
+    html, body { overflow: hidden; background: #fff; font-family: 'Libre Baskerville', serif; }
     .imi-map-widget { width: 100%; max-width: 960px; margin: 0 auto; }
     .map-label { font-family: 'Roboto Condensed', sans-serif; font-size: 12px; color: #888; margin-bottom: 6px; letter-spacing: 0.03em; }
-    #imi-map { width: 100%; height: 380px; background: #ffffff; }
+    #imi-map { width: 100%; height: 330px; background: #ffffff; }
     .leaflet-control-attribution { display: none !important; }
     .leaflet-control-zoom { display: none !important; }
     .custom-tooltip { position: absolute; z-index: 9999; background: #fff; border: 1px solid #e4e4e4; box-shadow: 0 4px 16px rgba(0,0,0,0.10); padding: 10px 12px; width: 160px; display: none; pointer-events: none; }
@@ -128,7 +114,6 @@ async function main() {
 </div>
 <script>
   const OFFICES = ${JSON.stringify(offices, null, 2)};
-
   function makeIcon(isHq) {
     const fill = isHq ? "#c71e1d" : "#1d81a2";
     const size = isHq ? 20 : 13;
@@ -141,22 +126,18 @@ async function main() {
       iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, size]
     });
   }
-
   const map = L.map("imi-map", {
     zoomControl: false, attributionControl: false, dragging: false,
     scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
     keyboard: false, touchZoom: false
   });
-
   fetch("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
     .then(r => r.json())
     .then(geojson => {
       geojson.features = geojson.features.filter(f => f.properties.name !== "Antarctica");
       L.geoJSON(geojson, { style: { fillColor: "#ededed", fillOpacity: 1, color: "#cccccc", weight: 0.5 } }).addTo(map);
-
       const tooltip = document.getElementById('custom-tooltip');
       map.on('click', function() { tooltip.style.display = 'none'; });
-
       OFFICES.forEach(o => {
         const marker = L.marker([o.lat, o.lng], { icon: makeIcon(o.hq) }).addTo(map);
         marker.on('click', function(e) {
@@ -172,20 +153,13 @@ async function main() {
           tooltip.style.top = (point.y + 16) + 'px';
         });
       });
-
-      if (OFFICES.length > 1) {
-        map.fitBounds(OFFICES.map(o => [o.lat, o.lng]), { padding: [30, 30], maxZoom: 4 });
-      } else {
-        map.setView([20, -20], 2);
-      }
+      map.setView([20, -20], 1);
     });
-  map.setView([20, -20], 2);
+  map.setView([20, -20], 1);
 <\/script>
 </body>
 </html>`;
-
   fs.writeFileSync("index.html", html);
   console.log(`Done! Wrote index.html with ${offices.length} offices.`);
 }
-
 main().catch(e => { console.error(e); process.exit(1); });
